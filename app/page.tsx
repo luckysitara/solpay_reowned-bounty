@@ -1,7 +1,7 @@
 "use client"
 
-import App from "../src/App"
+import Header from "../src/components/Header"
 
 export default function SyntheticV0PageForDeployment() {
-  return <App />
+  return <Header />
 }
