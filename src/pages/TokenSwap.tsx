@@ -1,23 +1,36 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useJupiter } from "@jup-ag/react-hook"
 import { useWallet } from "@solana/wallet-adapter-react"
 import { PublicKey } from "@solana/web3.js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useNotification } from "../contexts/NotificationContext"
+import { TOKENS } from "../config/constants"
 
 const TokenSwap = () => {
   const { publicKey } = useWallet()
   const { showNotification } = useNotification()
   const [inputAmount, setInputAmount] = useState("")
-  const [outputAmount, setOutputAmount] = useState("")
+  const [inputToken, setInputToken] = useState("SOL")
+  const [outputToken, setOutputToken] = useState("USDC")
 
-  const inputMint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") // USDC
-  const outputMint = new PublicKey("So11111111111111111111111111111111111111112") // Wrapped SOL
+  const inputMint = useMemo(
+    () => new PublicKey(TOKENS.find((t) => t.symbol === inputToken)?.address || ""),
+    [inputToken],
+  )
+  const outputMint = useMemo(
+    () => new PublicKey(TOKENS.find((t) => t.symbol === outputToken)?.address || ""),
+    [outputToken],
+  )
+
+  const amount = useMemo(() => {
+    return Math.round(Number(inputAmount) * Math.pow(10, 9))
+  }, [inputAmount])
 
   const { exchange, routes, loading, error } = useJupiter({
-    amount: Number.parseFloat(inputAmount) * 1e6, // USDC has 6 decimals
+    amount,
     inputMint,
     outputMint,
     slippage: 1, // 1% slippage
@@ -41,7 +54,7 @@ const TokenSwap = () => {
       }
       showNotification({
         title: "Swap Successful",
-        description: `Swapped ${inputAmount} USDC for ${outputAmount} SOL`,
+        description: `Swapped ${inputAmount} ${inputToken} for ${routes[0]?.outAmount || "unknown"} ${outputToken}`,
         type: "success",
       })
     } catch (err) {
@@ -54,28 +67,63 @@ const TokenSwap = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-xl">
-      <h2 className="text-2xl font-bold mb-4">Token Swap</h2>
+    <div className="max-w-md mx-auto mt-10 p-6 bg-card rounded-lg shadow-xl">
+      <h2 className="text-2xl font-bold mb-4 text-card-foreground">Token Swap</h2>
       <div className="space-y-4">
         <div>
-          <Label htmlFor="inputAmount">USDC Amount</Label>
+          <Label htmlFor="inputAmount">Amount</Label>
           <Input
             id="inputAmount"
             type="number"
             value={inputAmount}
             onChange={(e) => setInputAmount(e.target.value)}
-            placeholder="Enter USDC amount"
+            placeholder="Enter amount"
           />
         </div>
         <div>
-          <Label htmlFor="outputAmount">Estimated SOL</Label>
-          <Input id="outputAmount" type="number" value={outputAmount} readOnly placeholder="Estimated SOL amount" />
+          <Label htmlFor="inputToken">From</Label>
+          <Select value={inputToken} onValueChange={setInputToken}>
+            <SelectTrigger id="inputToken">
+              <SelectValue placeholder="Select token" />
+            </SelectTrigger>
+            <SelectContent>
+              {TOKENS.map((token) => (
+                <SelectItem key={token.symbol} value={token.symbol}>
+                  {token.symbol}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Button onClick={handleSwap} disabled={loading || !routes || routes.length === 0} className="w-full">
+        <div>
+          <Label htmlFor="outputToken">To</Label>
+          <Select value={outputToken} onValueChange={setOutputToken}>
+            <SelectTrigger id="outputToken">
+              <SelectValue placeholder="Select token" />
+            </SelectTrigger>
+            <SelectContent>
+              {TOKENS.map((token) => (
+                <SelectItem key={token.symbol} value={token.symbol}>
+                  {token.symbol}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {routes && routes.length > 0 && (
+          <div className="text-sm text-muted-foreground">
+            Expected output: {routes[0]?.outAmount || "Unknown"} {outputToken}
+          </div>
+        )}
+        <Button
+          onClick={handleSwap}
+          disabled={loading || !routes || routes.length === 0}
+          className="w-full bg-jupiter-purple hover:bg-jupiter-blue text-white"
+        >
           {loading ? "Calculating..." : "Swap"}
         </Button>
       </div>
-      {error && <p className="text-red-500 mt-2">{error.message}</p>}
+      {error && <p className="text-destructive mt-2">{error.message}</p>}
     </div>
   )
 }

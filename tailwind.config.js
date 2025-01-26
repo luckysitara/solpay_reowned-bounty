@@ -38,17 +38,22 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        //These colors are preserved from the original config
-        "#00ffcc": "#00ffcc",
-        "#ff3366": "#ff3366",
-        "#1a1b26": "#1a1b26",
-        background: {
-          start: "#1a1b26",
-          end: "#ff3366",
+        // Jupiter colors
+        jupiter: {
+          purple: "#9945FF",
+          blue: "#14F195",
+        },
+        // Solana colors
+        solana: {
+          purple: "#9945FF",
+          green: "#14F195",
+          blue: "#00C2FF",
+          magenta: "#FF2BFF",
         },
       },
       backgroundImage: {
-        "gradient-main": "linear-gradient(45deg, var(--tw-gradient-stops))",
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
       borderRadius: {
         lg: "var(--radius)",

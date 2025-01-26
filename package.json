@@ -61,11 +61,15 @@
     "@solana/wallet-adapter-react": "latest",
     "@solana/wallet-adapter-react-ui": "latest",
     "react-router-dom": "latest",
+    "@solana/app-kit": "latest",
     "@solana/web3.js": "latest",
     "qrcode.react": "latest",
     "@jup-ag/react-hook": "latest",
-    "@solana/app-kit": "latest",
-    "@solana/wallet-adapter-wallets": "latest"
+    "@solana/wallet-adapter-base": "latest",
+    "@solana/wallet-adapter-wallets": "latest",
+    "@solana/spl-token": "latest",
+    "bs58": "latest",
+    "framer-motion": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

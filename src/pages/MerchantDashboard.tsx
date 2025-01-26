@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useWallet } from "@solana/wallet-adapter-react"
+import { useConnection } from "@solana/wallet-adapter-react"
 import { useAppKit } from "@solana/app-kit"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -9,16 +10,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RecurringPayments } from "../components/RecurringPayments"
 import { InvoiceGenerator } from "../components/InvoiceGenerator"
 import { useNotification } from "../contexts/NotificationContext"
+import { createTransaction, signAndConfirmTransaction } from "../utils/solanaPay"
+import { PublicKey } from "@solana/web3.js"
+import QRCode from "qrcode.react"
+import { TokenManagement } from "../components/TokenManagement"
+import TokenSwap from "./TokenSwap"
+import { Settings } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { TOKENS, getTokenPublicKey } from "../config/constants"
 
 const MerchantDashboard = () => {
   const { connected, publicKey } = useWallet()
+  const { connection } = useConnection()
   const { showNotification } = useNotification()
-  const { getBalance, getTransactions } = useAppKit()
+  const { getBalance, getTransactions, getTokenAccounts, transferSol } = useAppKit()
   const [balance, setBalance] = useState(0)
   const [transactions, setTransactions] = useState([])
   const [filteredTransactions, setFilteredTransactions] = useState([])
   const [filter, setFilter] = useState("all")
   const [sortOrder, setSortOrder] = useState("desc")
+  const [amount, setAmount] = useState("")
+  const [recipient, setRecipient] = useState("")
+  const [token, setToken] = useState("SOL")
+  const [qrValue, setQrValue] = useState("")
 
   useEffect(() => {
     if (publicKey) {
@@ -63,6 +77,54 @@ const MerchantDashboard = () => {
     )
   }
 
+  const handleCreatePayment = async () => {
+    if (!publicKey || !amount || !recipient) return
+
+    try {
+      const recipientPubkey = new PublicKey(recipient)
+      const amountValue = Number.parseFloat(amount)
+
+      let signature
+
+      if (token === "SOL") {
+        signature = await transferSol(recipientPubkey, amountValue)
+      } else {
+        const tokenPublicKey = getTokenPublicKey(token)
+        const transaction = await createTransaction(
+          connection,
+          publicKey,
+          recipientPubkey,
+          amountValue,
+          tokenPublicKey,
+          undefined,
+          `Payment from ${publicKey.toBase58()}`,
+        )
+        signature = await signAndConfirmTransaction(connection, transaction, publicKey)
+      }
+
+      showNotification({
+        title: "Payment Successful",
+        description: `Transaction signature: ${signature}`,
+        type: "success",
+      })
+
+      // Refresh balance and transactions
+      fetchBalanceAndTransactions()
+    } catch (error) {
+      showNotification({
+        title: "Payment Failed",
+        description: error.message,
+        type: "error",
+      })
+    }
+  }
+
+  const generateQRCode = () => {
+    if (!amount || !publicKey) return
+    const paymentUrl = `solana:${publicKey.toString()}?amount=${amount}&token=${token}`
+    setQrValue(paymentUrl)
+  }
+
   if (!connected) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
@@ -79,11 +141,22 @@ const MerchantDashboard = () => {
         <p className="text-white/80">Balance: {balance.toFixed(2)} SOL</p>
       </div>
 
+      <div className="mb-8">
+        <img
+          src="https://images.unsplash.com/photo-1617791160505-6f00504e3519?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1600&q=80"
+          alt="Merchant dashboard visualization"
+          className="w-full h-48 object-cover rounded-lg shadow-lg"
+        />
+      </div>
+
       <Tabs defaultValue="transactions" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="recurring">Recurring</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="createPayment">Create Payment</TabsTrigger>
+          <TabsTrigger value="tokens">Tokens</TabsTrigger>
+          <TabsTrigger value="swap">Swap</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
@@ -123,12 +196,16 @@ const MerchantDashboard = () => {
                   <div>
                     <span
                       className={`px-2 py-1 rounded text-sm ${
-                        tx.type === "receive" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                        tx.type === "receive"
+                          ? "bg-solana-green/20 text-solana-green"
+                          : "bg-solana-magenta/20 text-solana-magenta"
                       }`}
                     >
                       {tx.type === "receive" ? "Received" : "Sent"}
                     </span>
-                    <p className="text-white font-medium mt-1">{tx.amount.toFixed(2)} SOL</p>
+                    <p className="text-white font-medium mt-1">
+                      {tx.amount.toFixed(2)} {tx.token}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -144,6 +221,68 @@ const MerchantDashboard = () => {
         <TabsContent value="invoices" className="p-6 rounded-lg border border-white/10">
           <h2 className="text-xl font-semibold text-white mb-4">Invoice Generator</h2>
           <InvoiceGenerator />
+        </TabsContent>
+
+        <TabsContent value="createPayment" className="p-6 rounded-lg border border-white/10">
+          <h2 className="text-xl font-semibold text-white mb-4">Create Payment</h2>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="Enter amount"
+              />
+            </div>
+            <div>
+              <Label htmlFor="recipient">Recipient Address</Label>
+              <Input
+                id="recipient"
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                placeholder="Enter recipient's Solana address"
+              />
+            </div>
+            <div>
+              <Label htmlFor="token">Token</Label>
+              <Select value={token} onValueChange={setToken}>
+                <SelectTrigger id="token">
+                  <SelectValue placeholder="Select token" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TOKENS.map((t) => (
+                    <SelectItem key={t.symbol} value={t.symbol}>
+                      {t.symbol}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleCreatePayment} className="bg-jupiter-purple hover:bg-jupiter-blue text-white">
+              Create Payment
+            </Button>
+          </div>
+          <div className="mt-8">
+            <h3 className="text-lg font-semibold text-white mb-4">Generate Payment QR Code</h3>
+            <Button onClick={generateQRCode} className="bg-jupiter-purple hover:bg-jupiter-blue text-white">
+              Generate QR Code
+            </Button>
+            {qrValue && (
+              <div className="mt-4 bg-white p-4 rounded-lg inline-block">
+                <QRCode value={qrValue} size={200} />
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="tokens" className="p-6 rounded-lg border border-white/10">
+          <TokenManagement />
+        </TabsContent>
+
+        <TabsContent value="swap" className="p-6 rounded-lg border border-white/10">
+          <TokenSwap />
         </TabsContent>
 
         <TabsContent value="settings" className="p-6 rounded-lg border border-white/10">
@@ -162,10 +301,22 @@ const MerchantDashboard = () => {
                 <SelectContent>
                   <SelectItem value="SOL">SOL</SelectItem>
                   <SelectItem value="USDC">USDC</SelectItem>
+                  <SelectItem value="USDT">USDT</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Button>Save Settings</Button>
+            <div className="flex items-center space-x-2">
+              <Switch id="automaticPayouts" />
+              <Label htmlFor="automaticPayouts">Enable Automatic Payouts</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch id="emailNotifications" />
+              <Label htmlFor="emailNotifications">Email Notifications</Label>
+            </div>
+            <Button className="bg-jupiter-purple hover:bg-jupiter-blue text-white">
+              <Settings className="w-4 h-4 mr-2" />
+              Save Settings
+            </Button>
           </div>
         </TabsContent>
       </Tabs>
